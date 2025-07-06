@@ -81,7 +81,7 @@ class S2_Peps_Search:
                                                 self.search_processingLevel, 
                                                 search_timerange, 
                                                 self.maxRecords)
-        print(url)
+        # print(url)
         response = requests.get(url, auth=(self.user, self.password))
         
         data = response.json()
