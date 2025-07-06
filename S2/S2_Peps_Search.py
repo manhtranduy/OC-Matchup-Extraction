@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 import os
 from typing import List, Union
 from support_functions import get_datetime_from_S2
+import numpy as np
 
 class S2_Peps_Search:
     def __init__(self, Input: Union[str, List[str]], 
@@ -11,7 +12,7 @@ class S2_Peps_Search:
                  end_date:str=datetime.now().strftime('%Y-%m-%d'), 
                  credential_file:str=os.getcwd()+'/credentials_peps.txt', 
                  processingLevel:int=1, 
-                 cloudcoverpercentage:int=60, 
+                 cloudcoverpercentage:int=80, 
                  satellite:str='', 
                  user:str='', 
                  password:str='',
@@ -27,8 +28,14 @@ class S2_Peps_Search:
         self.password = password
         self.maxRecords = maxRecords
         self.rootURL = 'https://peps.cnes.fr/resto/api/collections/S2ST/search.json?'
-        self.product_summary = pd.DataFrame(columns=['product_list', 'product_size', 'product_url',
-                                                     'cloud_coverage', 'satellite_datetime'])
+        self.product_summary = pd.DataFrame({
+            'product_list': pd.Series(dtype='object'),
+            'product_size': pd.Series(dtype='float'),
+            'product_url': pd.Series(dtype='object'),
+            'cloud_coverage': pd.Series(dtype='float'),
+            'satellite_datetime': pd.Series(dtype='datetime64[ns]')
+        })
+        
         if isinstance(self.Input, list):
             if len(self.Input) > 2:
                 if self.Input[0] > self.Input[1] or self.Input[2] > self.Input[3]:
@@ -74,7 +81,7 @@ class S2_Peps_Search:
                                                 self.search_processingLevel, 
                                                 search_timerange, 
                                                 self.maxRecords)
-        # print(url)
+        print(url)
         response = requests.get(url, auth=(self.user, self.password))
         
         data = response.json()
@@ -85,11 +92,34 @@ class S2_Peps_Search:
         else:
             product_list = data['features']
             print(f'{len(product_list)} products found from {start_date} to {end_date}')
+            
+            # Process all products first, then concatenate once
+            products_data = []
             for product in product_list:
-                self.product_summary = pd.concat([self.product_summary, self.product_info(product['properties'])], ignore_index=True)
-        if not self.satellite:
+                product_info = self.product_info(product['properties'])
+                if not product_info.empty:
+                    products_data.append(product_info)
+            
+            # Only concatenate if we have data to add
+            if products_data:
+                new_products_df = pd.concat(products_data, ignore_index=True)
+                self.product_summary = pd.concat([self.product_summary, new_products_df], ignore_index=True)
+        
+        # Filter by satellite if a satellite name is provided
+        if self.satellite:
             self.product_summary = self.product_summary[self.product_summary['product_list'].str.contains(self.satellite)]
-        self.product_summary = self.product_summary[self.product_summary['cloud_coverage'] <= self.cloudcoverpercentage]
+        
+        # Apply cloud coverage filter
+        if not self.product_summary.empty:
+            # Check and report on cloud coverage
+            clouds_exceed_threshold = self.product_summary['cloud_coverage'] > self.cloudcoverpercentage
+            if clouds_exceed_threshold.any():
+                exceeding_products = self.product_summary[clouds_exceed_threshold]
+                for _, row in exceeding_products.iterrows():
+                    print(f"Product {row['product_list']} cloud coverage ({np.floor(row['cloud_coverage'])}%) exceeds threshold {self.cloudcoverpercentage}%")
+            
+            # Filter out products that exceed the cloud cover threshold
+            self.product_summary = self.product_summary[self.product_summary['cloud_coverage'] <= self.cloudcoverpercentage]
 
     def product_info(self, product):
         product_summary = {}
@@ -99,7 +129,7 @@ class S2_Peps_Search:
         product_summary['product_size'] = size
         product_summary['product_url'] = product['services']['download']['url']
         product_summary['cloud_coverage'] = product['cloudCover']
-        product_summary['satellite_datetime'],_ = get_datetime_from_S2(product['title'])
+        product_summary['satellite_datetime'], _ = get_datetime_from_S2(product['title'])
         return pd.DataFrame([product_summary])
 
 # S2_search = S2_Peps_Search(Input='31UCS')

@@ -111,6 +111,7 @@ class S2_SciCopernicus_Search:
             'Authorization': f'Bearer {self.user}:{self.password}'
         }
 
+        # print(URL)
         try:
             response = requests.get(URL, auth=(self.user, self.password))
             Data = response.json()

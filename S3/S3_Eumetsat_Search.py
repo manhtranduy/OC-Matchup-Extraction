@@ -73,7 +73,7 @@ class S3_Eumetsat_Search:
                     raise ValueError('Error: Please enter in a valid input longitude')
                 elif self.Input[2] > self.Input[3]:
                     raise ValueError('Error: Please enter in a valid input latitude')
-                self.search_input = f'&bbox={self.Input[0]:.4f},{self.Input[2]:.4f},{self.Input[1]:.4f},{self.Input[0]:.4f}'
+                self.search_input = f'&bbox={self.Input[0]:.4f},{self.Input[2]:.4f},{self.Input[1]:.4f},{self.Input[3]:.4f}'
                 
             elif len(self.Input) == 2:
                 self.search_input = f'&bbox={self.Input[0]:.4f},{self.Input[1]:.4f},{self.Input[0]:.4f},{self.Input[1]:.4f}'

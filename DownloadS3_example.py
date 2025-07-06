@@ -4,11 +4,13 @@ from S3.S3_Eumetsat_Download import S3_Eumetsat_Download
 import os
 import glob
 
-products=S3_Eumetsat_Search([105.5029,107.4190,8.7030,10.9810],processingLevel=2)
-products=products.product_summary
+products=S3_Eumetsat_Search([105.5029,107.4190,8.7030,10.9810],
+                            processingLevel=2,
+                            start_date='2020-06-01',
+                            end_date='2020-06-30')
 
-# l1_folder='/home/manh/Desktop/work/Brazil_Vincent/Charlotte/S3/L1C/'
-l2_dir='M:/S3/L2'
+products=products.product_summary
+l2_dir='path/to/save'
 
 
     
