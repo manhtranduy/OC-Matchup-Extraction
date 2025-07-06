@@ -9,12 +9,12 @@ import numpy as np
 import subprocess
 import h5py
 
-acolite_path = 'F:/work/matchup_python/acolite'
+acolite_path = 'D:/work/Codes/OC-Matchup-Extraction/acolite-main'
 if not acolite_path in sys.path:
     sys.path.append(acolite_path)
 
 # polymer_path = 'F:/work/matchup_python/polymer-v4.16.1'
-polymer_path = '/mnt/hgfs/F/matchup_python/polymer-master'
+polymer_path = '/home/manh/Desktop/work/Codes/Eumetsat/matchup_python/polymer-master'
 if not polymer_path in sys.path:
     sys.path.append(polymer_path)
 
@@ -64,7 +64,7 @@ def generateMODIS_L1B(l1_image, geo_dir, l1b_dir,anc_dir, ocssw_dir):
 
 
     if not os.path.isfile(anc_file):
-        subprocess.call(f'python {ocssw_dir}/ocssw_src/src/scripts/getanc.py {l1_image} -o {anc_file}', shell=True)
+        subprocess.call(f'python {ocssw_dir}/ocssw_src/src/scripts/getanc.py {l1_image} -o {anc_file} --refreshDB', shell=True)
         # subprocess.call(f'{ocssw_dir}/bin/getanc {l1_image} -o {anc_file}', shell=True)
     
     
@@ -75,7 +75,7 @@ def generateMODIS_L1B(l1_image, geo_dir, l1b_dir,anc_dir, ocssw_dir):
     # Generate GEO file
     if not os.path.exists(geo_file):
         print("GENERATING NEW GEOFILE...")
-        subprocess.call(f'{ocssw_dir}/bin/modis_GEO {l1_image} -o {geo_file}', shell=True)
+        subprocess.call(f'{ocssw_dir}/bin/modis_GEO {l1_image} -o {geo_file} --refreshDB', shell=True)
 
     # Generate L1B file
     if not os.path.exists(l1b_file):
@@ -124,7 +124,49 @@ def generateMODIS_L1C(l1b_file,geo_file,l1c_dir,ocssw_dir):
 
     return l1cfile  
 
+def RunL2GEN_modis(l1b_file,geo_file, anc_file, l2_dir,ocssw_dir,aer_opt):
+    l1_name = os.path.basename(os.path.normpath(l1b_file))
+    l2_name = f'{l1_name}L2_SeaDAS.nc'
+    l2_name = l2_name.replace('L1B_LAC', '')
+    l2_mini = os.path.join(l2_dir,l2_name)
+    if not os.path.isfile(l1b_file):
+        failed_flag = True
+        return l2_mini, failed_flag
+    # Set the OCSSWROOT environment variable
+    os.environ['OCSSWROOT'] = ocssw_dir
+
+    # Build the command to source OCSSW_bash.env within a shell session
+    source_command = f'source {os.path.join(os.environ["OCSSWROOT"], "OCSSW_bash.env")} && env'
+    
+    # Run the command using a shell
+    completed_process = subprocess.run(source_command, shell=True, executable="/bin/bash", stdout=subprocess.PIPE, text=True)
+    
+    # Update the environment with the sourced variables
+    for line in completed_process.stdout.splitlines():
+        key, value = line.split('=', 1)
+        os.environ[key] = value
         
+    # return the l2 mini file name and the failed flag  
+    # 
+    failed_flag = False
+    if os.path.isfile(l2_mini):
+        print(f'{l2_mini} is existed/n')
+        return l2_mini, failed_flag
+    
+    # Read coordinates
+    print(f'Creating l2file {l2_name} /n')
+    subprocess.call('{}/bin/l2gen geofile={} ifile={} ofile={} par={} \
+                    oformat="netcdf4" l2prod="Rrs_nnn Rrs_748 latitude longitude"'.format(
+                   ocssw_dir,
+                   geo_file,
+                   l1b_file,
+                   l2_mini,
+                   anc_file,
+                    ), 
+                    shell=True)
+    return l2_mini, failed_flag
+    
+
 def RunL2GEN_modis_subset(l1b_file,geo_file, anc_file, lon, lat, l2_dir,ocssw_dir,aer_opt):
     l1_name = os.path.basename(os.path.normpath(l1b_file))
     l2_name = f'{l1_name}_{lon:.4f}_{lat:.4f}_l2gen.nc'
@@ -151,11 +193,11 @@ def RunL2GEN_modis_subset(l1b_file,geo_file, anc_file, lon, lat, l2_dir,ocssw_di
     # 
     failed_flag = False
     if os.path.isfile(l2_mini):
-        print(f'{l2_mini} is existed\n')
+        print(f'{l2_mini} is existed/n')
         return l2_mini, failed_flag
     
     # Read coordinates
-    print(f'Creating minifile {l2_name} \n')
+    print(f'Creating minifile {l2_name} /n')
     # subprocess.call('{}/bin/l2gen geofile={} ifile={} ofile={} north={} south={} east={} west={} aer_opt={} glint_opt=1 maskland=0 maskhilt=0 maskcloud=0 aer_wave_short=1240 aer_wave_long=2130  oformat="netcdf4" l2prod="Rrs_nnn Rrs_748 latitude longitude"'.format(
     #                ocssw_dir,
     #                geo_file,
@@ -207,7 +249,7 @@ def RunPOLYMER_msi_subset(l1_image, lon, lat, l2_dir):
     l2_mini = os.path.join(l2_dir,f'{l1_name}_{lon}_{lat}_polymer.nc')
     
     if os.path.isfile(l2_mini):
-        print(f'{l2_mini} is existed\n')
+        print(f'{l2_mini} is existed/n')
         return l2_mini, failed_flag
     
     # Read coordinates
@@ -216,12 +258,12 @@ def RunPOLYMER_msi_subset(l1_image, lon, lat, l2_dir):
         
         M, I = FindMinIndex(lon, lat, lon_s, lat_s)
         row, col = I
-        srow = row - 20
-        scol = col - 20
-        erow = row - 20
-        ecol = col -20
+        srow = row - 30
+        scol = col - 30
+        erow = row + 30
+        ecol = col + 30
     except:
-        print('Reading coordinates failed \n')
+        print('Reading coordinates failed /n')
         failed_flag = True
         return l2_mini, failed_flag
 
@@ -230,19 +272,56 @@ def RunPOLYMER_msi_subset(l1_image, lon, lat, l2_dir):
     l1_dir = glob(l1_image+'/GRANULE/'+'L1C*')[0]
     
     try:
-        # print(f'Processing {l2_mini}\n')
-        print(f'Creating minifile {l1_name}_{lon:.4f}_{lat:.4f}_polymer.nc \n')
+        # print(f'Processing {l2_mini}/n')
+        print(f'Creating minifile {l1_name}_{lon:.4f}_{lat:.4f}_polymer.nc /n')
         run_atm_corr(Level1_MSI(l1_dir,resolution=resolution,sline=srow, eline=erow, scol=scol, ecol=ecol),
              Level2_NETCDF(l2_mini,          
                            overwrite=True)
              ,multiprocessing=1)
-        # print(f'Processing {l2_mini} Done!\n')
+        # print(f'Processing {l2_mini} Done!/n')
         
     except:
-        print('Polymer processing failed \n')
+        print('Polymer processing failed /n')
         failed_flag = True
         return l2_mini,  failed_flag
     return l2_mini,  failed_flag
+
+def RunPOLYMER_msi(l1_image, l2_dir,res=60):
+    os.chdir(polymer_path)
+    from polymer.main import run_atm_corr
+    from polymer.level2_nc import Level2_NETCDF
+    from polymer.level1_msi import Level1_MSI
+    from glob import glob
+    # return the l2 mini file name and the failed flag  
+    # 
+    failed_flag = False
+    resolution = res
+    l1_name = os.path.basename(os.path.normpath(l1_image))
+    l1_name.replace('SAFE', '')
+    l2_file = os.path.join(l2_dir,f'{l1_name}_polymer{resolution}.nc')
+    
+    if os.path.isfile(l2_file):
+        print(f'{l2_file} is existed/n')
+        return l2_file, failed_flag
+    
+    # Read coordinates
+
+
+    # Polymer processing
+    l1_dir = glob(l1_image+'/GRANULE/'+'L1C*')[0]
+    
+    try:
+        run_atm_corr(Level1_MSI(l1_dir,resolution=resolution),
+             Level2_NETCDF(l2_file,          
+                           overwrite=True)
+             ,multiprocessing=1)
+        # print(f'Processing {l2_mini} Done!/n')
+        
+    except:
+        print('Polymer processing failed /n')
+        failed_flag = True
+        return l2_file,  failed_flag
+    return l2_file,  failed_flag
 
 # OLCI
 def RunPOLYMER_olci_subset(l1_image, lon, lat, l2_dir):
@@ -256,7 +335,7 @@ def RunPOLYMER_olci_subset(l1_image, lon, lat, l2_dir):
     l1_name = os.path.basename(os.path.normpath(l1_image))
     l2_mini = os.path.join(l2_dir,f'{l1_name}_{lon:.4f}_{lat:.4f}_polymer.nc')
     if os.path.isfile(l2_mini):
-        print(f'{l2_mini} is existed\n')
+        print(f'{l2_mini} is existed/n')
         return l2_mini, failed_flag
     
     # Read coordinates
@@ -275,15 +354,15 @@ def RunPOLYMER_olci_subset(l1_image, lon, lat, l2_dir):
         erow = row + 20
         ecol = col + 20
     except:
-        print('Reading coordinates failed \n')
+        print('Reading coordinates failed /n')
         failed_flag = True
         return l2_mini, failed_flag
     
 
     # Polymer processing   
     try:
-        # print(f'Processing {l2_mini}\n')
-        print(f'Creating minifile {l1_name}_{lon:.4f}_{lat:.4f}_polymer.nc \n')
+        # print(f'Processing {l2_mini}/n')
+        print(f'Creating minifile {l1_name}_{lon:.4f}_{lat:.4f}_polymer.nc /n')
         run_atm_corr(Level1_OLCI(l1_image,sline=srow, eline=erow, scol=scol, ecol=ecol),
                      Level2_NETCDF(l2_mini,          
                                    overwrite=True)
@@ -296,7 +375,7 @@ def RunPOLYMER_olci_subset(l1_image, lon, lat, l2_dir):
 
         
     except:
-        print('Polymer processing failed \n')
+        print('Polymer processing failed /n')
         failed_flag = True
         return l2_mini,  failed_flag
     return l2_mini,  failed_flag
@@ -314,7 +393,7 @@ def RunPOLYMER_modis_subset(l1_image, lon, lat, l2_dir):
     l1_name = os.path.basename(os.path.normpath(l1_image))
     l2_mini = os.path.join(l2_dir,f'{l1_name}_{lon:.4f}_{lat:.4f}_polymer.nc')
     if os.path.isfile(l2_mini) or (not os.path.isfile(l1_image)):
-        print(f'{l2_mini} is existed\n')
+        print(f'{l2_mini} is existed/n')
         return l2_mini, failed_flag
     
     # Read coordinates
@@ -333,15 +412,15 @@ def RunPOLYMER_modis_subset(l1_image, lon, lat, l2_dir):
         erow = row + 20
         ecol = col + 20
     except:
-        print('Reading coordinates failed \n')
+        print('Reading coordinates failed /n')
         failed_flag = True
         return l2_mini, failed_flag
     
 
     # Polymer processing   
 # try:
-    # print(f'Processing {l2_mini}\n')
-    print(f'Creating minifile {l1_name}_{lon:.4f}_{lat:.4f}_polymer.nc \n')
+    # print(f'Processing {l2_mini}/n')
+    print(f'Creating minifile {l1_name}_{lon:.4f}_{lat:.4f}_polymer.nc /n')
     run_atm_corr(Level1_MODIS(l1_image,sline=srow, eline=erow, scol=scol, ecol=ecol),
                  Level2_NETCDF(l2_mini,          
                                overwrite=True)
@@ -354,7 +433,7 @@ def RunPOLYMER_modis_subset(l1_image, lon, lat, l2_dir):
 
     
 # except:
-#     print('Polymer processing failed \n')
+#     print('Polymer processing failed /n')
 #     failed_flag = True
 #     return l2_mini,  failed_flag
     return l2_mini,  failed_flag
@@ -367,6 +446,11 @@ def read_coord_msi(l1_image, resolution):
     
     from lxml import objectify
     import pyproj
+    from glob import glob
+    import os
+    import numpy as np
+    
+    print('Reading MSI coordinates, this might take time ...')
     resolution=str(resolution)
     # Parse XML file
     meta_file = list(glob(os.path.join(l1_image, 'GRANULE', '*', 'MTD_TL.xml')))[0]
@@ -374,7 +458,8 @@ def read_coord_msi(l1_image, resolution):
     
     geocoding = xmlroot.Geometric_Info.find('Tile_Geocoding')
     code = geocoding.find('HORIZONTAL_CS_CODE').text
-    proj = pyproj.Proj('+init={}'.format(code))
+    # Fix: Remove the '+init=' prefix to address the FutureWarning
+    proj = pyproj.Proj(code)
     
     # read image size for current resolution
     for e in geocoding.findall('Size'):
@@ -390,13 +475,11 @@ def read_coord_msi(l1_image, resolution):
             ULY = int(e.find('ULY').text)
             XDIM = int(e.find('XDIM').text)
             YDIM = int(e.find('YDIM').text)
-
     X, Y = np.meshgrid(ULX + XDIM*np.arange(totalheight), 
                     ULY + YDIM*np.arange(totalwidth))
     
     lon, lat = (proj(X, Y, inverse=True))
     return lon, lat, totalheight, totalwidth
-
 
 # =============================================================================
 # ACOLITE
@@ -416,26 +499,41 @@ def RunACOLITE_msi_subset(l1_image, lon, lat, l2_dir):
     l2_mini = os.path.join(l2_dir,f'{l1_name}_{lon}_{lat}_acolite.nc')
     _,date_str=get_datetime_from_S2(l1_name)
     date_str=date_str.replace('-','_')
+    if os.path.isfile(l2_mini):
+        print(f'{l2_mini} is existed/n')
+        return l2_mini,  failed_flag
     
     # Read coordinates
-    try:
-        lon_s,lat_s, totalheight, totalwidth = read_coord_msi(l1_image, resolution)
-        
-        M, I = FindMinIndex(lon, lat, lon_s, lat_s)
-        row, col = np.unravel_index(I, (totalheight, totalwidth))
 
-        N_pos = lat_s[row-20,col]
-        S_pos = lat_s[row+20,col]
-        W_pos = lon_s[row,col-20]
-        E_pos = lon_s[row,col+20]
-        limit = np.array([S_pos,W_pos,N_pos,E_pos]).flatten().tolist()
-    except:
-        print('Reading coordinates failed \n')
+    lon_s,lat_s, totalheight, totalwidth = read_coord_msi(l1_image, resolution)
+    
+    M, I = FindMinIndex(lon, lat, lon_s, lat_s)
+    if M>0.01:
+        print('extracted point is out of scene')
+        failed_flag = True
+        return l2_mini,  failed_flag
+    # row, col = np.unravel_index(I, (totalheight, totalwidth))
+    row, col = I
+    
+    # Check bounds before accessing surrounding positions
+    if row - 10 < 0 or row + 10 >= totalheight or col - 10 < 0 or col + 10 >= totalwidth:
+        print('extracted position is too close to edge or outside image bounds')
         failed_flag = True
         return l2_mini, failed_flag
+
+        
+    N_pos = lat_s[row-10,col]
+    S_pos = lat_s[row+10,col]
+    W_pos = lon_s[row,col-10]
+    E_pos = lon_s[row,col+10]
+    limit = np.array([S_pos,W_pos,N_pos,E_pos]).flatten().tolist()
+    # except:
+    #     print('Reading coordinates failed /n')
+    #     failed_flag = True
+    #     return l2_mini, failed_flag
     
     # Define a dictionary for settings  
-    acolite_settings = {"output":l2_mini, "s2_target_res": resolution,
+    acolite_settings = {"output":l2_dir, "s2_target_res": resolution,
                         "aerosol_correction":"dark_spectrum",
                         "l2w_parameters":["rhow_*"], 
                         "l2w_mask_water_parameters": False, 
@@ -445,19 +543,19 @@ def RunACOLITE_msi_subset(l1_image, lon, lat, l2_dir):
                         "glint_write_rhog_all":False,
                         "rgb_rhot": False, "rgb_rhos": False,
                         "oli_orange_band": False,
-                        "l1r_nc_delete": False, "l2r_nc_delete": False,
+                        "l1r_nc_delete": True, "l2r_nc_delete": True,
                         "gains": True}
     
     # Acolite processing
 
     try:
         if os.path.isfile(l2_mini):
-            print(f'{l2_mini} is existed\n')
-            return
+            print(f'{l2_mini} is existed/n')
+            return l2_mini,  failed_flag
         else:  
-            print(f'Creating minifile {l1_name}_{lon:.4f}_{lat:.4f}_acolite.nc \n')
+            print(f'Creating minifile {l1_name}_{lon:.4f}_{lat:.4f}_acolite.nc /n')
             ac.acolite.acolite_run(acolite_settings,inputfile=l1_image)
-        # print(f'Processing {l2_mini} Done!\n')
+        print(f'Processing {l2_mini} Done!/n')
         
         L1R_file = glob(f'{l2_dir}/*{date_str}*L1R*')[0]
         L2R_file = glob(f'{l2_dir}/*{date_str}*L2R*')[0]
@@ -471,7 +569,7 @@ def RunACOLITE_msi_subset(l1_image, lon, lat, l2_dir):
             os.remove(txt_file)
         
     except:
-        print('Acolite processing failed \n')
+        print('Acolite processing failed /n')
         failed_flag = True
         return l2_mini,  failed_flag
     return l2_mini,  failed_flag
@@ -486,7 +584,7 @@ def RunACOLITE_olci_subset(l1_image, lon, lat, l2_dir):
     l2_mini = os.path.join(l2_dir,f'{l1_name}_{lon:.4f}_{lat:.4f}_acolite.nc')
     
     if os.path.isfile(l2_mini):
-        print(f'{l2_mini} already exists\n')
+        print(f'{l2_mini} already exists/n')
         return l2_mini,  failed_flag
     
 
@@ -507,7 +605,7 @@ def RunACOLITE_olci_subset(l1_image, lon, lat, l2_dir):
         
         M, I = FindMinIndex(lon, lat, lon_s, lat_s)
         if M > 1:
-            print('Out of scene \n')
+            print('Out of scene /n')
             failed_flag = True
             return l2_mini, failed_flag
         # row, col = np.unravel_index(I, (totalheight, totalwidth))
@@ -518,7 +616,7 @@ def RunACOLITE_olci_subset(l1_image, lon, lat, l2_dir):
         E_pos = lon_s[row,col+20]
         limit = np.array([S_pos,W_pos,N_pos,E_pos]).flatten().tolist()
     except:
-        print('Reading coordinates failed \n')
+        print('Reading coordinates failed /n')
         failed_flag = True
         return l2_mini, failed_flag
     
@@ -538,9 +636,9 @@ def RunACOLITE_olci_subset(l1_image, lon, lat, l2_dir):
     # Acolite processing
 
     try: 
-        print(f'Creating minifile {l1_name}_{lon:.4f}_{lat:.4f}_acolite.nc \n')
+        print(f'Creating minifile {l1_name}_{lon:.4f}_{lat:.4f}_acolite.nc /n')
         ac.acolite_run(acolite_settings,inputfile=l1_image)
-        # print(f'Processing {l2_mini} Done!\n')
+        # print(f'Processing {l2_mini} Done!/n')
         
         L1R_file = glob(f'{l2_dir}/*{date_str}*L1R*')[0]
         L2R_file = glob(f'{l2_dir}/*{date_str}*L2R*')[0]
@@ -553,7 +651,7 @@ def RunACOLITE_olci_subset(l1_image, lon, lat, l2_dir):
         for txt_file in txt_files:
             os.remove(txt_file)
     except:
-        print('Acolite processing failed \n')
+        print('Acolite processing failed /n')
         failed_flag = True
         return l2_mini,  failed_flag
     
@@ -572,7 +670,7 @@ def RunEumetsat_olci_subset(l2_image, lon, lat, l2_dir):
     l2_mini = os.path.join(l2_dir,f'{l2_name}_{lon:.4f}_{lat:.4f}_eumetsat.nc')
     
     if os.path.isfile(l2_mini):
-        print(f'{l2_name}_{lon:.4f}_{lat:.4f}_eumetsat.nc already exists\n')
+        print(f'{l2_name}_{lon:.4f}_{lat:.4f}_eumetsat.nc already exists/n')
         return l2_mini,  failed_flag
     
 
@@ -594,13 +692,13 @@ def RunEumetsat_olci_subset(l2_image, lon, lat, l2_dir):
         
         M, I = FindMinIndex(lon, lat, lon_s, lat_s)
         if M > 1:
-            print('Out of scene \n')
+            print('Out of scene /n')
             failed_flag = True
             return l2_mini, failed_flag
         # row, col = np.unravel_index(I, (totalheight, totalwidth))
         row,col = I
     except:
-        print('Reading coordinates failed \n')
+        print('Reading coordinates failed /n')
         failed_flag = True
         return l2_mini, failed_flag
     
@@ -648,11 +746,11 @@ def RunEumetsat_olci_subset(l2_image, lon, lat, l2_dir):
         
         mini_nc_file.close()
         
-        print(f'Created mini file {l2_name}_{lon:.4f}_{lat:.4f}_eumetsat.nc \n')
-    # print(f'Processing {l2_mini} Done!\n')
+        print(f'Created mini file {l2_name}_{lon:.4f}_{lat:.4f}_eumetsat.nc /n')
+    # print(f'Processing {l2_mini} Done!/n')
     
     except:
-        print('Creating {l2_mini} failed \n')
+        print('Creating {l2_mini} failed /n')
         failed_flag = True
         mini_nc_file.close()
         os.remove(l2_mini)
@@ -672,7 +770,7 @@ def RunNASA_modis_subset(l2_image, lon, lat, l2_dir):
     l2_mini = os.path.join(l2_dir,f'{l2_name}_{lon:.4f}_{lat:.4f}_nasa.nc')
     
     if os.path.isfile(l2_mini):
-        print(f'{l2_name}_{lon:.4f}_{lat:.4f}_nasa.nc already exists\n')
+        print(f'{l2_name}_{lon:.4f}_{lat:.4f}_nasa.nc already exists/n')
         return l2_mini,  failed_flag
     
     
@@ -689,13 +787,13 @@ def RunNASA_modis_subset(l2_image, lon, lat, l2_dir):
         
         M, I = FindMinIndex(lon, lat, lon_s, lat_s)
         if M > 1:
-            print('Out of scene \n')
+            print('Out of scene /n')
             failed_flag = True
             return l2_mini, failed_flag
         # row, col = np.unravel_index(I, (totalheight, totalwidth))
         row,col = I
     except:
-        print('Reading coordinates failed \n')
+        print('Reading coordinates failed /n')
         failed_flag = True
         return l2_mini, failed_flag
     
@@ -731,11 +829,11 @@ def RunNASA_modis_subset(l2_image, lon, lat, l2_dir):
         
         mini_nc_file.close()
         
-        print(f'Created mini file {l2_name}_{lon:.4f}_{lat:.4f}_nasa.nc \n')
-    # print(f'Processing {l2_mini} Done!\n')
+        print(f'Created mini file {l2_name}_{lon:.4f}_{lat:.4f}_nasa.nc /n')
+    # print(f'Processing {l2_mini} Done!/n')
     
     except:
-        print(f'Creating {l2_mini} failed \n')
+        print(f'Creating {l2_mini} failed /n')
         failed_flag = True
         mini_nc_file.close()
         os.remove(l2_mini)
@@ -757,7 +855,7 @@ def RunOCSMART_modis_subset(l1b_file, lon, lat, l2_dir, geo_file):
     l2_mini = os.path.join(l2_dir,f'{l1_name}_{lon:.4f}_{lat:.4f}_ocsmart.nc')
     
     if os.path.isfile(l2_mini):
-        print(f'{l2_mini} is existed\n')
+        print(f'{l2_mini} is existed/n')
         return l2_mini, failed_flag
     
     import pyhdf.SD
@@ -804,13 +902,13 @@ def RunOCSMART_modis_subset(l1b_file, lon, lat, l2_dir, geo_file):
                     break
            
             if n_pixels == 0:
-                print(f'Data point is not in the image \n')
+                print(f'Data point is not in the image /n')
                 failed_flag = True
                 return l2_mini, failed_flag
                 
             
             
-            print(f'Creating minifile {os.path.basename(l2_mini)} \n')
+            print(f'Creating minifile {os.path.basename(l2_mini)} /n')
             
             OCSMART_MC(L1B_file = l1b_file,
                        L2_file = l2_mini,
@@ -821,7 +919,7 @@ def RunOCSMART_modis_subset(l1b_file, lon, lat, l2_dir, geo_file):
                        west = W_pos
                        )
     except:
-            print('Reading coordinates failed \n')
+            print('Reading coordinates failed /n')
             failed_flag = True
     return l2_mini, failed_flag
     
@@ -839,7 +937,7 @@ def RunOCSMART_msi_subset(l1_image, lon, lat, l2_dir):
     l2_mini = os.path.join(l2_dir,f'{l1_name}_{lon}_{lat}_ocsmart.nc')
     
     if os.path.isfile(l2_mini):
-        print(f'{l2_mini} is existed\n')
+        print(f'{l2_mini} is existed/n')
         return l2_mini, failed_flag
     
     # Read coordinates
@@ -853,7 +951,7 @@ def RunOCSMART_msi_subset(l1_image, lon, lat, l2_dir):
     #     E_pos = lon_s[row,col+20]
     #     W_pos = lon_s[row,col-20]
     # except:
-    #     print('Reading coordinates failed \n')
+    #     print('Reading coordinates failed /n')
     #     failed_flag = True
     #     return l2_mini, failed_flag
  
@@ -862,7 +960,7 @@ def RunOCSMART_msi_subset(l1_image, lon, lat, l2_dir):
                 
             
     try:        
-        print(f'Creating minifile {os.path.basename(l2_mini)} \n')
+        print(f'Creating minifile {os.path.basename(l2_mini)} /n')
         
         # OCSMART_MC(L1B_file = l1_image,
         #            GEOpath=[],
@@ -883,7 +981,7 @@ def RunOCSMART_msi_subset(l1_image, lon, lat, l2_dir):
         
 
     except:
-            print('Reading coordinates failed \n')
+            print('Reading coordinates failed /n')
             failed_flag = True
     return l2_mini, failed_flag
  
